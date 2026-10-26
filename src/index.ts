@@ -1,16 +1,13 @@
 #!/usr/bin/env node
 
 import { intro, isCancel, multiselect, outro, spinner } from "@clack/prompts"
-import { execa as baseExeca } from "execa"
-import type { Result } from "execa"
+import { x } from "tinyexec"
+import type { Output } from "tinyexec"
 
-const execaOptions = { all: true, reject: false } as const
-const execa = baseExeca(execaOptions)
-
-const logError = (message: string, result: Result<typeof execaOptions>) => {
+const logError = (message: string, result: Output) => {
   process.exitCode = 1
   console.error(message)
-  console.warn((result.all || result.shortMessage) ?? "error message was blank")
+  console.warn(result.stderr || result.stdout || "error message was blank")
 }
 
 const deleteRemoteRefs = async () => {
@@ -18,10 +15,10 @@ const deleteRemoteRefs = async () => {
   const s = spinner()
   s.start("Fetching refs...")
 
-  const lsRemote = await execa`git ls-remote --refs -q`
+  const lsRemote = await x("git", ["ls-remote", "--refs", "--quiet"])
   s.stop()
 
-  if (lsRemote.failed) {
+  if (lsRemote.exitCode !== 0) {
     logError("An error occurred while fetching refs", lsRemote)
     outro("Exiting...")
     return
@@ -65,9 +62,9 @@ const deleteRemoteRefs = async () => {
   const refsToDelete = selectedRefs.filter((ref) => typeof ref === "string")
 
   const deletePromises = refsToDelete.map(async (ref) => {
-    const result = await execa`git push --no-verify --delete origin ${ref}`
-    if (result.failed) logError(`An error occurred while deleting ref: ${ref}`, result)
-    else console.info(`Deleted ref: ${ref}`)
+    const result = await x("git", ["push", "--no-verify", "--delete", "origin", ref])
+    if (result.exitCode === 0) console.info(`Deleted ref: ${ref}`)
+    else logError(`An error occurred while deleting ref: ${ref}`, result)
   })
 
   await Promise.all(deletePromises)
